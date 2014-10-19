@@ -30,7 +30,6 @@
 #include <QtWidgets/QSizePolicy>
 #include <QtWidgets/QTextEdit>
 #include <QtGui/QContextMenuEvent>
-#include <QtGui/QDesktopServices>
 #include <QtGui/QKeyEvent>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QMessageBox>
@@ -40,6 +39,7 @@
 #include <QtWebKitWidgets/QWebFrame>
 #include <QRegularExpression>
 #include <QRegularExpressionMatch>
+#include <QStandardPaths>
 
 #include "BookManipulation/Book.h"
 #include "BookManipulation/CleanSource.h"
@@ -78,6 +78,35 @@ const QString XHTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
  */
 static const QString GET_BODY_TAG_HTML = "new XMLSerializer().serializeToString( document.body.cloneNode(false) );";
 
+// %1 = CKE path.
+// %2 = Text to load.
+// %3 = language
+// %4 = customConfig : '/custom/ckeditor_config.js'.
+const QString CKE_BASE =
+    "<html>"
+    "<head>"
+    "    <script type=\"text/javascript\" src=\"%1/ckeditor.js\"></script>"
+    "</head>"
+    "<body>"
+    "    <form>"
+    "        <textarea id=\"editor\" name=\"editor\">%2</textarea>"
+    "        <script>"
+    "            CKEDITOR.replace('editor', { fullPage: true, startupFocus: true, language: '%3',"
+    "                removePlugins: 'scayt,menubutton,liststyle,tabletools,contextmenu',"
+    "                coreStyles_bold: { element : 'span', attributes :  {'style': 'font-weight: bold;'} },"
+    "                coreStyles_italic: { element : 'span', attributes : {'style': 'font-style: italic;'}},"
+    "                coreStyles_underline: { element : 'span', attributes : {'style': 'text-decoration: underline;'}},"
+    "                coreStyles_strike: { element : 'span', attributes : {'style': 'text-decoration: line-through;'}, onchangeverrides : 'strike' },"
+    "                coreStyles_subscript : { element : 'span', attributes : {'style': 'vertical-align: sub; font-size: smaller;'}, overrides : 'sub' },"
+    "                coreStyles_superscript : { elementent : 'span', attributes : {'style': 'vertical-align: super; font-size: smaller;'}, overrides : 'sup' },"
+    "            %4});"
+    "            CKEDITOR.on('instanceReady', function(e) { e.editor.execCommand('maximize'); });"
+    "            CKEDITOR.instances.editor.on('change', function() { BookViewEditor.TextChangedFilter(); });"
+    "        </script>"
+    "    </form>"
+    "</body>"
+    "</html>";
+
 
 BookViewEditor::BookViewEditor(QWidget *parent)
     :
@@ -98,7 +127,7 @@ BookViewEditor::BookViewEditor(QWidget *parent)
     c_GetAncestorAttribute(Utility::ReadUnicodeTextFile(":/javascript/get_ancestor_attribute.js")),
     c_SetAncestorAttribute(Utility::ReadUnicodeTextFile(":/javascript/set_ancestor_attribute.js"))
 {
-    setContextMenuPolicy(Qt::CustomContextMenu);
+    //setContextMenuPolicy(Qt::CustomContextMenu);
     page()->settings()->setAttribute(QWebSettings::DeveloperExtrasEnabled, false);
     page()->settings()->setAttribute(QWebSettings::JavascriptCanAccessClipboard, true);
     page()->settings()->setAttribute(QWebSettings::LocalContentCanAccessRemoteUrls, false);
@@ -173,37 +202,43 @@ BookViewEditor::~BookViewEditor()
     }
 }
 
-
 void BookViewEditor::CustomSetDocument(const QString &path, const QString &html)
 {
     m_isLoadFinished = false;
     m_path = path;
-    BookViewPreview::CustomSetDocument(m_path, html);
-    page()->setContentEditable(true);
-    SetWebPageModified(false);
-    emit PageOpened();
+
+    QString cke_path;
+#ifdef Q_OS_MAC
+    cke_path = QCoreApplication::applicationDirPath() + "/../ckeditor";
+#else
+    cke_path = QCoreApplication::applicationDirPath() + "/ckeditor";
+// On *nix we have an installation path we need to check too.
+#ifndef Q_OS_WIN32
+    if (cke_path.isEmpty() || !QDir(cke_path).exists()) {
+        cke_path = QCoreApplication::applicationDirPath() + "/../share/" + QCoreApplication::applicationName().toLower() + "/ckeditor";
+    }
+#endif
+#endif
+
+    QString cke_settings;
+    QString cke_setting_path = QStandardPaths::writableLocation(QStandardPaths::DataLocation) + "/ckeditor_config.js";
+    if (QFile::exists(cke_setting_path)) {
+        cke_settings = QString("customConfig: '%1'").arg(cke_setting_path);
+    }
+
+    SettingsStore settings;
+    QString base = CKE_BASE.arg(QDir::fromNativeSeparators(cke_path)).arg(html.QString::toHtmlEscaped()).arg(settings.uiLanguage()).arg(cke_settings);
+    setHtml(base, QUrl::fromLocalFile(path));
+
+    page()->mainFrame()->addToJavaScriptWindowObject("BookViewEditor", this);
+
+    //emit PageOpened();
 }
 
 QString BookViewEditor::GetHtml()
 {
-    RemoveWebkitCruft();
-    // Set the xml tag here rather than let Tidy do it.
-    // This prevents false mismatches with the cache later on.
-    QString html_from_Qt = page()->mainFrame()->toHtml();
-    html_from_Qt = RemoveBookViewReplaceSpans(html_from_Qt);
-    // Convert nbsp to entity because it cannot be seen and there are issues
-    // where CV will remove them if they are a single character.
-    html_from_Qt = CleanSource::CharToEntity(html_from_Qt);
-    // Make sure body always has text - primarily from Split Section.
-    QRegularExpression empty_body_search("<body>\\s</body>");
-    QRegularExpressionMatch empty_body_search_mo = empty_body_search.match(html_from_Qt);
-    int empty_body_tag_start = empty_body_search_mo.capturedStart();
-    if (empty_body_tag_start != -1) {
-        int empty_body_tag_end = empty_body_tag_start + QString("<body>").length();
-        html_from_Qt.insert(empty_body_tag_end, "\n  <p>&#160;</p>");
-    };
-
-    return html_from_Qt;
+    QString command = "CKEDITOR.instances.editor.getData();";
+    return EvaluateJavascript(command).toString();
 }
 
 #if 0
@@ -220,7 +255,9 @@ QString BookViewEditor::GetHtml5()
 
 bool BookViewEditor::InsertHtml(const QString &html)
 {
-    return ExecCommand("insertHTML", html);
+    QString javascript = "CKEDITOR.instances.editor.insertHtml('" + html + "');";
+    EvaluateJavascript(javascript);
+    return true;
 }
 
 void BookViewEditor::SetZoomFactor(float factor)
@@ -257,22 +294,26 @@ QString BookViewEditor::SplitSection()
 
 bool BookViewEditor::IsModified()
 {
-    return m_WebPageModified;
+    QString javascript = "CKEDITOR.instances.editor.checkDirty();";
+    return EvaluateJavascript(javascript).toBool();
 }
 
 void BookViewEditor::ResetModified()
 {
-    SetWebPageModified(false);
+    QString javascript = "CKEDITOR.instances.editor.resetDirty();";
+    EvaluateJavascript(javascript);
 }
 
 void BookViewEditor::Undo()
 {
-    page()->triggerAction(QWebPage::Undo);
+    QString javascript = "CKEDITOR.instances.editor.undo();";
+    EvaluateJavascript(javascript);
 }
 
 void BookViewEditor::Redo()
 {
-    page()->triggerAction(QWebPage::Redo);
+    QString javascript = "CKEDITOR.instances.editor.redo();";
+    EvaluateJavascript(javascript);
 }
 
 // Overridden so we can emit the FocusLost() signal.
@@ -289,7 +330,7 @@ void BookViewEditor::EmitPageUpdated()
 
 QString BookViewEditor::GetSelectedText()
 {
-    QString javascript = "window.getSelection().toString();";
+    QString javascript = "CKEDITOR.instances.editor.getSelection().getSelectedText();";
     return EvaluateJavascript(javascript).toString();
 }
 

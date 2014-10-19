@@ -2894,28 +2894,35 @@ void MainWindow::SetStateActionsStaticView()
 
 void MainWindow::SetupPreviewTimer()
 {
+#if 0
     m_PreviewTimer.setSingleShot(true);
     m_PreviewTimer.setInterval(1000);
     connect(&m_PreviewTimer, SIGNAL(timeout()),
             this,            SLOT(UpdatePreview()));
+#endif
 }
 
 void MainWindow::UpdatePreviewRequest()
 {
+#if 0
     if (m_PreviewTimer.isActive()) {
         m_PreviewTimer.stop();
     }
     m_PreviewTimer.start();
+#endif
 }
 
 void MainWindow::UpdatePreviewCSSRequest()
 {
+#if 0
     m_SaveCSS = true;
     UpdatePreviewRequest();
+#endif
 }
 
 void MainWindow::UpdatePreview()
 {
+#if 0
     m_PreviewTimer.stop();
 
     QString text;
@@ -2964,13 +2971,16 @@ void MainWindow::UpdatePreview()
             m_PreviewWindow->UpdatePage(html_resource->GetFullPath(), text, location);
         }
     }
+#endif
 }
 
 void MainWindow::InspectHTML()
 {
     m_PreviewWindow->show();
     m_PreviewWindow->raise();
+#if 0
     UpdatePreview();
+#endif
 }
 
 void MainWindow::UpdateCursorPositionLabel(int line, int column)
@@ -4259,7 +4269,7 @@ void MainWindow::LoadInitialFile(const QString &openfilepath, bool is_internal)
 
 void MainWindow::ConnectSignalsToSlots()
 {
-    connect(m_PreviewWindow, SIGNAL(Shown()), this, SLOT(UpdatePreview()));
+    //connect(m_PreviewWindow, SIGNAL(Shown()), this, SLOT(UpdatePreview()));
     connect(m_PreviewWindow, SIGNAL(GoToPreviewLocationRequest()), this, SLOT(GoToPreviewLocation()));
     connect(m_PreviewWindow, SIGNAL(ZoomFactorChanged(float)),     this, SLOT(UpdateZoomLabel(float)));
     connect(m_PreviewWindow, SIGNAL(ZoomFactorChanged(float)),     this, SLOT(UpdateZoomSlider(float)));
@@ -4403,8 +4413,10 @@ void MainWindow::ConnectSignalsToSlots()
             this,                   SLOT(UpdateUIWhenTabsSwitch()));
     connect(&m_TabManager,          SIGNAL(TabChanged(ContentTab *, ContentTab *)),
             this,                    SLOT(UpdateBrowserSelectionToTab()));
+#if 0
     connect(&m_TabManager,          SIGNAL(TabChanged(ContentTab *, ContentTab *)),
             this,                    SLOT(UpdatePreview()));
+#endif
     connect(m_BookBrowser,          SIGNAL(UpdateBrowserSelection()),
             this,                    SLOT(UpdateBrowserSelectionToTab()));
     connect(m_BookBrowser, SIGNAL(RenumberTOCContentsRequest()),
@@ -4511,7 +4523,7 @@ void MainWindow::MakeTabConnections(ContentTab *tab)
     }
 
     if (rType == Resource::CSSResourceType) {
-        connect(tab,   SIGNAL(CSSUpdated()), this, SLOT(UpdatePreviewCSSRequest()));
+        //connect(tab,   SIGNAL(CSSUpdated()), this, SLOT(UpdatePreviewCSSRequest()));
     }
 
     if (rType == Resource::HTMLResourceType ||

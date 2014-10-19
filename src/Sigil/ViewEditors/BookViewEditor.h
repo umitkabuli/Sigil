@@ -69,8 +69,6 @@ public:
     void CustomSetDocument(const QString &path, const QString &html);
 
     QString GetHtml();
-    //QString GetXHtml11();
-    //QString GetHtml5();
 
     bool InsertHtml(const QString &html);
 
