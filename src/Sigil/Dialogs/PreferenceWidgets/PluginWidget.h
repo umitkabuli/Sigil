@@ -45,7 +45,6 @@ private:
 
     Ui::PluginWidget ui;
     bool m_isDirty;
-    QString m_LastFolderOpen;
 };
 
 #endif // PLUGINWIDGET_H
