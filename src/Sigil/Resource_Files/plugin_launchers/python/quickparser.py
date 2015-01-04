@@ -89,7 +89,8 @@ class QuickXHTMLParser(object):
                 while p < n and s[p:p+1] == ' ' : p += 1
                 b = p
                 while p < n and s[p:p+1] != '=' : p += 1
-                aname = s[b:p].lower()
+                # attribute names can be mixed case and are in SVG
+                aname = s[b:p]
                 aname = aname.rstrip(' ')
                 p += 1
                 while p < n and s[p:p+1] == ' ' : p += 1
@@ -178,9 +179,9 @@ class QuickXHTMLParser(object):
         if ttype in SPECIAL_HANDLING_TYPES and tattr is not None and 'special' in tattr:
             info = tattr['special']
             if ttype == 'comment':
-                return '<%s %s-->' % tname, info
+                return '<%s %s-->' % (tname, info)
             else:
-                return '<%s %s>' % tname, info
+                return '<%s %s>' % (tname, info)
         res = []
         res.append('<%s' % tname)
         if tattr is not None:

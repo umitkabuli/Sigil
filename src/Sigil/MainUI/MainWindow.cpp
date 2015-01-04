@@ -173,6 +173,7 @@ MainWindow::MainWindow(const QString &openfilepath, bool is_internal, QWidget *p
     m_menuPluginsInput(NULL),
     m_menuPluginsOutput(NULL),
     m_menuPluginsEdit(NULL),
+    m_menuPluginsValidation(NULL),
     m_SaveCSS(false)
 {
     ui.setupUi(this);
@@ -215,12 +216,12 @@ MainWindow::~MainWindow()
 // Actions can be removed
 void MainWindow::loadPluginsMenu()
 {
-    m_menuPlugins=ui.menuPlugins;
-    m_actionManagePlugins=ui.actionManage_Plugins;
+    PluginDB *pdb = PluginDB::instance();
+
+    m_menuPlugins = ui.menuPlugins;
+    m_actionManagePlugins = ui.actionManage_Plugins;
 
     unloadPluginsMenu();
-
-    PluginDB *pdb = PluginDB::instance();
 
     connect(m_actionManagePlugins, SIGNAL(triggered()), this, SLOT(ManagePluginsDialog()));
 
@@ -242,20 +243,24 @@ void MainWindow::loadPluginsMenu()
                 connect(m_menuPluginsInput,  SIGNAL(triggered(QAction *)), this, SLOT(runPlugin(QAction *)));
             }
             m_menuPluginsInput->addAction(pname);
-
         } else if (ptype == "output") {
             if (m_menuPluginsOutput == NULL) {
                 m_menuPluginsOutput = m_menuPlugins->addMenu(tr("Output"));
                 connect(m_menuPluginsOutput, SIGNAL(triggered(QAction *)), this, SLOT(runPlugin(QAction *)));
             }
             m_menuPluginsOutput->addAction(pname);
-
-        } else {
+        } else if (ptype == "edit") {
             if (m_menuPluginsEdit == NULL) {
                 m_menuPluginsEdit = m_menuPlugins->addMenu(tr("Edit"));
                 connect(m_menuPluginsEdit,   SIGNAL(triggered(QAction *)), this, SLOT(runPlugin(QAction *)));
             }
             m_menuPluginsEdit->addAction(pname);
+        } else if (ptype == "validation") {
+            if (m_menuPluginsValidation == NULL) {
+                m_menuPluginsValidation = m_menuPlugins->addMenu(tr("Validation"));
+                connect(m_menuPluginsValidation,   SIGNAL(triggered(QAction *)), this, SLOT(runPlugin(QAction *)));
+            }
+            m_menuPluginsValidation->addAction(pname);
         }
     }
 }
@@ -264,11 +269,11 @@ void MainWindow::loadPluginsMenu()
 void MainWindow::unloadPluginsMenu()
 {
     if (m_menuPlugins != NULL) {
-        if (m_menuPluginsEdit != NULL) {
-            disconnect(m_menuPluginsEdit, SIGNAL(triggered(QAction *)), this, SLOT(runPlugin(QAction *)));
-            m_menuPluginsEdit->clear();
-            m_menuPlugins->removeAction(m_menuPluginsEdit->menuAction());
-            m_menuPluginsEdit = NULL;
+        if (m_menuPluginsInput != NULL) {
+            disconnect(m_menuPluginsInput, SIGNAL(triggered(QAction *)), this, SLOT(runPlugin(QAction *)));
+            m_menuPluginsInput->clear();
+            m_menuPlugins->removeAction(m_menuPluginsInput->menuAction());
+            m_menuPluginsInput = NULL;
         }
         if (m_menuPluginsOutput != NULL) {
             disconnect(m_menuPluginsOutput, SIGNAL(triggered(QAction *)), this, SLOT(runPlugin(QAction *)));
@@ -276,13 +281,20 @@ void MainWindow::unloadPluginsMenu()
             m_menuPlugins->removeAction(m_menuPluginsOutput->menuAction());
             m_menuPluginsOutput = NULL;
         }
-        if (m_menuPluginsInput != NULL) {
-            disconnect(m_menuPluginsInput, SIGNAL(triggered(QAction *)), this, SLOT(runPlugin(QAction *)));
-            m_menuPluginsInput->clear();
-            m_menuPlugins->removeAction(m_menuPluginsInput->menuAction());
-            m_menuPluginsInput = NULL;
+        if (m_menuPluginsEdit != NULL) {
+            disconnect(m_menuPluginsEdit, SIGNAL(triggered(QAction *)), this, SLOT(runPlugin(QAction *)));
+            m_menuPluginsEdit->clear();
+            m_menuPlugins->removeAction(m_menuPluginsEdit->menuAction());
+            m_menuPluginsEdit = NULL;
+        }
+        if (m_menuPluginsValidation != NULL) {
+            disconnect(m_menuPluginsValidation, SIGNAL(triggered(QAction *)), this, SLOT(runPlugin(QAction *)));
+            m_menuPluginsValidation->clear();
+            m_menuPlugins->removeAction(m_menuPluginsValidation->menuAction());
+            m_menuPluginsValidation = NULL;
         }
     }
+    disconnect(m_actionManagePlugins, SIGNAL(triggered()), this, SLOT(ManagePluginsDialog()));
 }
 
 void MainWindow::runPlugin(QAction *action)
@@ -578,6 +590,9 @@ void MainWindow::closeEvent(QCloseEvent *event)
             m_SpellcheckEditor->ForceClose();
         }
 
+        if ((m_PreviewWindow)  && m_PreviewWindow->isVisible()) {
+            m_PreviewWindow->hide();
+        }
         event->accept();
     } else {
         event->ignore();
@@ -976,6 +991,25 @@ void MainWindow::SpellcheckEditorDialog()
 }
 
 
+void MainWindow::clearMemoryCaches()
+{
+    // See https://bugreports.qt-project.org/browse/QTBUG-4350
+    // QWebSettinbgs::clearMemoryCaches();
+
+    // replace the above with a similar sequence 
+    // that does not invalidate the fontCache
+
+    // toggle memory caches to disable and then re-enable
+    QWebSettings::setObjectCacheCapacities(0,0,0);
+    QWebSettings::setObjectCacheCapacities(0, 0, 100 * 1024 * 1024);
+
+    // do the same to flush the page cache
+    int numpages = QWebSettings::maximumPagesInCache();
+    QWebSettings::setMaximumPagesInCache(0);
+    QWebSettings::setMaximumPagesInCache(numpages);
+}
+
+
 void MainWindow::AddCover()
 {
     // Get the image to use.
@@ -1070,7 +1104,7 @@ void MainWindow::AddCover()
 
     m_BookBrowser->Refresh();
     m_Book->SetModified();
-    QWebSettings::clearMemoryCaches();
+    clearMemoryCaches();
     OpenResourceAndWaitUntilLoaded(*html_cover_resource);
     // Reload the tab to ensure it reflects updated image.
     FlowTab *flow_tab = GetCurrentFlowTab();
@@ -1466,7 +1500,7 @@ void MainWindow::InsertFilesFromDisk()
     QStringList filenames = m_BookBrowser->AddExisting(true);
     connect(m_BookBrowser, SIGNAL(ResourcesAdded()), this, SLOT(ResourcesAddedOrDeleted()));
     // Since we disconnected the signal we will have missed forced clearing of cache
-    QWebSettings::clearMemoryCaches();
+    clearMemoryCaches();
     QStringList internal_filenames;
     foreach(QString filename, filenames) {
         QString internal_filename = filename.right(filename.length() - filename.lastIndexOf("/") - 1);
@@ -2046,13 +2080,21 @@ QStringList MainWindow::GetStylesheetsAlreadyLinked(Resource *resource)
 
 void MainWindow::RemoveResources(QList<Resource *> resources)
 {
+    // work around Qt bug when deleting png images on page shown by both
+    // BookView and Preview by temporarily hiding the PreviewWindow
+    bool pw_showing = m_PreviewWindow->IsVisible();
+    if ((pw_showing) && (m_ViewState == MainWindow::ViewState_BookView)) {
+        m_PreviewWindow->hide();
+    }
     // Provide the open tab list to ensure one tab stays open
     if (resources.count() > 0) {
         m_BookBrowser->RemoveResources(m_TabManager.GetTabResources(), resources);
     } else {
         m_BookBrowser->RemoveSelection(m_TabManager.GetTabResources());
     }
-
+    if ((pw_showing) && !m_PreviewWindow->IsVisible()) {
+        m_PreviewWindow->show();
+    }
     ShowMessageOnStatusBar(tr("File(s) deleted."));
 }
 
@@ -3293,7 +3335,7 @@ void MainWindow::SetNewBook(QSharedPointer<Book> new_book)
 
 void MainWindow::ResourcesAddedOrDeleted()
 {
-    QWebSettings::clearMemoryCaches();
+    clearMemoryCaches();
 
     // Make sure currently visible tab is updated immediately
     FlowTab *flow_tab = GetCurrentFlowTab();
@@ -3403,6 +3445,12 @@ bool MainWindow::LoadFile(const QString &fullfilepath, bool is_internal)
     // Fallback to displaying a new book instead so GUI integrity is maintained.
     CreateNewBook();
     return false;
+}
+
+
+void MainWindow::SetValidationResults(const QList<ValidationResult> &results)
+{
+    m_ValidationResultsView->LoadResults(results);
 }
 
 

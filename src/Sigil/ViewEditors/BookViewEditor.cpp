@@ -37,6 +37,7 @@
 #include <QtWidgets/QShortcut>
 #include <QtGui/QTextDocument>
 #include <QtWebKit/QWebElement>
+#include <QtWebKit/QWebSettings>
 #include <QtWebKitWidgets/QWebFrame>
 #include <QRegularExpression>
 #include <QRegularExpressionMatch>
@@ -786,7 +787,7 @@ bool BookViewEditor::PasteClipEntry(ClipEditorModel::clipEntry *clip)
 void BookViewEditor::EmitInspectElement()
 {
     StoreCurrentCaretLocation();
-    emit InspectElement();
+    emit BVInspectElement();
 }
 
 void BookViewEditor::OpenContextMenu(const QPoint &point)

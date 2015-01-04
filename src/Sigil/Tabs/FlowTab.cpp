@@ -32,8 +32,6 @@
 #include <QtPrintSupport/QPrintDialog>
 #include <QtPrintSupport/QPrintPreviewDialog>
 #include <QtWidgets/QStackedWidget>
-#include <QtWebKitWidgets/QWebInspector>
-#include <QtWebKit/QWebSettings>
 
 #include "BookManipulation/CleanSource.h"
 #include "MiscEditors/ClipEditorModel.h"
@@ -67,7 +65,6 @@ FlowTab::FlowTab(HTMLResource &resource,
     m_views(new QStackedWidget(this)),
     m_wBookView(NULL),
     m_wCodeView(NULL),
-    m_inspector(NULL),
     m_ViewState(view_state),
     m_previousViewState(view_state),
     m_WellFormedCheckComponent(*new WellFormedCheckComponent(*this, parent)),
@@ -411,7 +408,7 @@ void FlowTab::ResourceModified()
 
 void FlowTab::LinkedResourceModified()
 {
-    QWebSettings::clearMemoryCaches();
+    MainWindow::clearMemoryCaches();
     ResourceModified();
     ReloadTabIfPending();
 }
@@ -1521,7 +1518,7 @@ void FlowTab::ConnectBookViewSignalsToSlots()
     connect(m_wBookView, SIGNAL(OpenClipEditorRequest(ClipEditorModel::clipEntry *)), this, SIGNAL(OpenClipEditorRequest(ClipEditorModel::clipEntry *)));
     connect(m_wBookView, SIGNAL(OpenIndexEditorRequest(IndexEditorModel::indexEntry *)), this, SIGNAL(OpenIndexEditorRequest(IndexEditorModel::indexEntry *)));
     connect(m_wBookView, SIGNAL(textChanged()), this, SLOT(EmitContentChanged()));
-    connect(m_wBookView, SIGNAL(InspectElement()), this, SIGNAL(InspectElement()));
+    connect(m_wBookView, SIGNAL(BVInspectElement()), this, SIGNAL(InspectElement()));
     connect(m_wBookView, SIGNAL(PageUpdated()), this, SLOT(EmitUpdatePreview()));
     connect(m_wBookView, SIGNAL(PageClicked()), this, SLOT(EmitUpdatePreviewImmediately()));
     connect(m_wBookView, SIGNAL(PageOpened()), this, SLOT(EmitUpdatePreviewImmediately()));

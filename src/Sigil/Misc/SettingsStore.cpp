@@ -24,6 +24,7 @@
 #include <QtCore/QCoreApplication>
 #include <QtCore/QStandardPaths>
 #include <QFile>
+#include <QDir>
 
 #include "Misc/SettingsStore.h"
 #include "Misc/PluginDB.h"
@@ -49,6 +50,7 @@ static QString KEY_PRESERVE_ENTITY_CODES = SETTINGS_GROUP + "/" + "preserve_enti
 
 static QString KEY_PLUGIN_INFO = SETTINGS_GROUP + "/" + "plugin_info";
 static QString KEY_PLUGIN_ENGINE_PATHS = SETTINGS_GROUP + "/" + "plugin_engine_paths";
+static QString KEY_PLUGIN_LAST_FOLDER = SETTINGS_GROUP + "/" + "plugin_add_last_folder";
 
 static QString KEY_BOOK_VIEW_FONT_FAMILY_STANDARD = SETTINGS_GROUP + "/" + "book_view_font_family_standard";
 static QString KEY_BOOK_VIEW_FONT_FAMILY_SERIF = SETTINGS_GROUP + "/" + "book_view_font_family_serif";
@@ -168,17 +170,17 @@ QString SettingsStore::renameTemplate()
 SettingsStore::CleanLevel SettingsStore::cleanLevel()
 {
     clearSettingsGroup();
-    int level = value(KEY_CLEAN_LEVEL, SettingsStore::CleanLevel_PrettyPrintTidy).toInt();
+    int level = value(KEY_CLEAN_LEVEL, SettingsStore::CleanLevel_PrettyPrintBS4).toInt();
 
     switch (level) {
         case SettingsStore::CleanLevel_PrettyPrint:
-        case SettingsStore::CleanLevel_PrettyPrintTidy:
-        case SettingsStore::CleanLevel_Tidy:
+        case SettingsStore::CleanLevel_PrettyPrintBS4:
+        case SettingsStore::CleanLevel_BS4:
             return static_cast<SettingsStore::CleanLevel>(level);
             break;
 
         default:
-            return SettingsStore::CleanLevel_PrettyPrintTidy;
+            return SettingsStore::CleanLevel_PrettyPrintBS4;
     }
 }
 
@@ -219,6 +221,12 @@ QHash <QString, QString> SettingsStore::pluginEnginePaths()
     return enginepath;
 }
 
+QString SettingsStore::pluginLastFolder()
+{
+    clearSettingsGroup();
+    return value(KEY_PLUGIN_LAST_FOLDER, QDir::homePath()).toString();
+}
+
 SettingsStore::BookViewAppearance SettingsStore::bookViewAppearance()
 {
     clearSettingsGroup();
@@ -241,7 +249,7 @@ SettingsStore::CodeViewAppearance SettingsStore::codeViewAppearance()
     appearance.css_quote_color = value(KEY_CODE_VIEW_CSS_QUOTE_COLOR, QColor(Qt::darkMagenta)).value<QColor>();
     appearance.css_selector_color = value(KEY_CODE_VIEW_CSS_SELECTOR_COLOR, QColor(Qt::darkRed)).value<QColor>();
     appearance.css_value_color = value(KEY_CODE_VIEW_CSS_VALUE_COLOR, QColor(Qt::black)).value<QColor>();
-    appearance.font_family = value(KEY_CODE_VIEW_FONT_FAMILY, "Consolas").toString();
+    appearance.font_family = value(KEY_CODE_VIEW_FONT_FAMILY, "Courier New").toString();
     appearance.font_size = value(KEY_CODE_VIEW_FONT_SIZE, 10).toInt();
     QColor defaultlineColor = QColor(Qt::yellow).lighter(175);
     appearance.line_highlight_color = value(KEY_CODE_VIEW_LINE_HIGHLIGHT_COLOR, defaultlineColor).value<QColor>();
@@ -379,6 +387,11 @@ void SettingsStore::setPluginEnginePaths(const QHash <QString, QString> &enginep
     setValue(KEY_PLUGIN_ENGINE_PATHS, ep);
 }
 
+void SettingsStore::setPluginLastFolder(const QString &lastfolder)
+{
+    clearSettingsGroup();
+    setValue(KEY_PLUGIN_LAST_FOLDER, lastfolder);
+}
 
 void SettingsStore::setBookViewAppearance(const SettingsStore::BookViewAppearance &book_view_appearance)
 {

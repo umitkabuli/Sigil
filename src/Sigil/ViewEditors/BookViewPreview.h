@@ -26,7 +26,6 @@
 
 #include <QtCore/QMap>
 #include <QtWebKitWidgets/QWebView>
-#include <QtWebKitWidgets/QWebInspector>
 
 #include "BookManipulation/XercesHUse.h"
 #include "ViewEditors/ViewEditor.h"
@@ -170,15 +169,8 @@ protected:
     bool m_isLoadFinished;
 
 protected slots:
-    /**
-     * Tracks the loading progress.
-     * Updates the state of the m_isLoadFinished variable
-     * depending on the received loading progress; if the
-     * progress equals 100, the state is true, otherwise false.
-     *
-     * @param progress The value of the loading progress (0-100).
-     */
-    void UpdateFinishedState(int progress);
+
+    void UpdateFinishedState(bool okay);
 
     /**
      * Opens the context menu at the requested point.
@@ -449,7 +441,6 @@ private:
 
     QAction *m_InspectElement;
 
-    QWebInspector *m_Inspector;
 };
 
 #endif // BOOKVIEWPREVIEW_H

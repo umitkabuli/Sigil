@@ -16,7 +16,7 @@
 #include "Misc/TempFolder.h"
 #include "Tabs/TabManager.h"
 #include "BookManipulation/XhtmlDoc.h"
-#include "PluginRunner.h"
+#include "Dialogs/PluginRunner.h"
 
 const QString ADOBE_FONT_ALGO_ID         = "http://ns.adobe.com/pdf/enc#RC";
 const QString IDPF_FONT_ALGO_ID          = "http://www.idpf.org/2008/embedding";
@@ -79,7 +79,7 @@ PluginRunner::~PluginRunner()
 QStringList PluginRunner::SupportedEngines()
 {
     QStringList engines;
-    engines << "python2.7" << "python3.4";
+    engines << "python2.7" << "python3.4" << "python2.7,python3.4" << "python3.4,python2.7";
     return engines;
 }
 
@@ -104,9 +104,20 @@ int PluginRunner::exec(const QString &name)
 
     // set up paths and things for the plugin and interpreter
     m_pluginsFolder = PluginDB::pluginsPath();
-    m_engine = plugin->get_engine();
     m_pluginType = plugin->get_type();
-    m_enginePath = pdb->get_engine_path(m_engine);
+
+    m_engine = plugin->get_engine();
+    // handle case of multiple engines
+    QStringList engineList;
+    if (m_engine.contains(",")) {
+        engineList = m_engine.split(",");
+    } else {
+        engineList.append(m_engine);
+    }
+    foreach(QString engine, engineList) {
+        m_enginePath = pdb->get_engine_path(engine);
+        if (!m_enginePath.isEmpty()) break;
+    } 
     if (m_enginePath.isEmpty()) {
         Utility::DisplayStdErrorDialog(tr("Error: Interpreter ") + m_engine + tr(" has no path set"));
         reject();
@@ -117,7 +128,7 @@ int PluginRunner::exec(const QString &name)
     launcher_root = PluginDB::launcherRoot();
 
     // Note: Keep SupportedEngines() in sync with the engine calling code here.
-    if ((m_engine == "python2.7") || (m_engine == "python3.4")) {
+    if ( m_engine.contains("python2.7") || m_engine.contains("python3.4") ) {
         m_launcherPath = launcher_root + "/python/launcher.py";
         m_pluginPath = m_pluginsFolder + "/" + m_pluginName + "/" + "plugin.py";
         if (!QFileInfo(m_launcherPath).exists()) {
@@ -163,7 +174,7 @@ void PluginRunner::startPlugin()
     ui.okButton->setEnabled(false);
     ui.cancelButton->setEnabled(true);
 
-
+    args.append(QString("-u"));  // sets python for unbuffered io
     args.append(QDir::toNativeSeparators(m_launcherPath));
     args.append(QDir::toNativeSeparators(m_bookRoot));
     args.append(QDir::toNativeSeparators(m_outputDir));
@@ -182,9 +193,9 @@ void PluginRunner::startPlugin()
 void PluginRunner::processOutput()
 {
     QByteArray newbytedata = m_process.readAllStandardOutput();
-    m_pluginOutput = m_pluginOutput + newbytedata ;
+    ui.textEdit->insertPlainText(newbytedata);
+    m_pluginOutput = m_pluginOutput + newbytedata;
 }
-
 
 void PluginRunner::pluginFinished(int exitcode, QProcess::ExitStatus exitstatus)
 {
@@ -211,7 +222,7 @@ void PluginRunner::pluginFinished(int exitcode, QProcess::ExitStatus exitstatus)
     }
 
     // before modifying xhtmnl files make sure they are well formed
-    if (! checkIsWellFormed() ) {
+    if (!checkIsWellFormed()) {
         ui.statusLbl->setText(tr("Status: No Changes Made"));
         return;
     }
@@ -232,7 +243,6 @@ void PluginRunner::pluginFinished(int exitcode, QProcess::ExitStatus exitstatus)
     m_book->GetFolderKeeper().SuspendWatchingResources();
 
     if (!m_filesToDelete.isEmpty()) {
-
         // before deleting make sure a tab of at least one of the remaining html files will be open
         // to prevent deleting the last tab when deleting resources
         QList <Resource *> remainingResources = m_xhtmlFiles.values();
@@ -244,7 +254,7 @@ void PluginRunner::pluginFinished(int exitcode, QProcess::ExitStatus exitstatus)
                 break;
             }
         }
-        if (! tabs_will_remain) {
+        if (!tabs_will_remain) {
             Resource *xhtmlresource = remainingResources.at(0);
             m_mainWindow->OpenResource(*xhtmlresource);
         }
@@ -263,6 +273,9 @@ void PluginRunner::pluginFinished(int exitcode, QProcess::ExitStatus exitstatus)
             book_modified = true;
         }
     }
+    if (!m_validationResults.isEmpty()) {
+        m_mainWindow->SetValidationResults(m_validationResults);
+    }
 
     // now make these changes known to Sigil
     m_book->GetFolderKeeper().ResumeWatchingResources();
@@ -276,13 +289,26 @@ void PluginRunner::pluginFinished(int exitcode, QProcess::ExitStatus exitstatus)
             m_bookBrowser->BookContentModified();
             m_bookBrowser->Refresh();
             m_book->SetModified();
-            // QWebSettings::clearMemoryCaches() and updates current tab
+            // clearMemoryCaches() and updates current tab
             m_mainWindow->ResourcesAddedOrDeleted();
         }
 #ifdef Q_OS_MAC
     }
 #endif
     ui.statusLbl->setText("Status: " + m_result);
+
+    // Validation plugins we auto close the plugin runner dialog
+    // since they'll see the results in the results panel.
+    //
+    // XXX: Technically we're only checking if validation results
+    // were checked. A plugin could do other things and set validation
+    // results too. We really should check that everything else a
+    // plugin can set is really empty before calling accept because
+    // it could have actual info the user needs to see in the dialog.
+    if (!m_validationResults.isEmpty()) {
+        accept();
+        return;
+    }
 }
 
 
@@ -325,6 +351,12 @@ void PluginRunner::cancelPlugin()
 
 bool PluginRunner::processResultXML()
 {
+    // ignore any extraneous information before wrapper xml at the end
+    int start_pos = m_pluginOutput.indexOf("<?xml ");
+    while (start_pos != -1) {
+        m_pluginOutput =  m_pluginOutput.mid(start_pos, -1);
+        start_pos = m_pluginOutput.indexOf("<?xml ", 1);
+    }
     QXmlStreamReader reader(m_pluginOutput);
     reader.setNamespaceProcessing(false);
     while (!reader.atEnd()) {
@@ -365,6 +397,32 @@ bool PluginRunner::processResultXML()
                 } else {
                     m_filesToModify.append(fileinfo);
                 }
+            } else if (name == "validationresult") {
+                QXmlStreamAttributes attr = reader.attributes();
+
+                QString type;
+                ValidationResult::ResType vtype;
+                type = attr.value("type").toString();
+                if (type == "info") {
+                    vtype = ValidationResult::ResType_Info;
+                } else if (type == "warning") {
+                    vtype = ValidationResult::ResType_Warn;
+                } else if (type == "error") {
+                    vtype = ValidationResult::ResType_Error;
+                } else {
+                    continue;
+                }
+
+                QString linenumber;
+                bool   lok;
+                int vlinenumber;
+                linenumber = attr.value("linenumber").toString();
+                vlinenumber = linenumber.toInt(&lok);
+                if (!lok) {
+                    vlinenumber = 0;
+                }
+
+                m_validationResults.append(ValidationResult(vtype, attr.value("filename").toString(), vlinenumber<0?0:(size_t)vlinenumber, attr.value("message").toString()));
             }
         }
     }
@@ -477,6 +535,7 @@ bool PluginRunner::deleteFiles(const QStringList &files)
                 m_tabManager->CloseTabForResource(*resource);
             }
             m_book->GetFolderKeeper().RemoveResource(*resource);
+            resource->Delete();
             changes_made = true;
         }
     }

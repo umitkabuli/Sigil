@@ -37,7 +37,6 @@
 
 class QStackedWidget;
 class QUrl;
-class QWebInspector;
 class BookViewEditor;
 class CodeViewEditor;
 class HTMLResource;
@@ -303,8 +302,6 @@ signals:
 
     void InspectElement();
 
-    void MarkSelectionRequest();
-    void ClearMarkedTextRequest();
 
 private slots:
 
@@ -406,8 +403,6 @@ private:
      * Displays and edits the raw code.
      */
     CodeViewEditor *m_wCodeView;
-
-    QWebInspector *m_inspector;
 
     /**
      * This is used in a few different ways.

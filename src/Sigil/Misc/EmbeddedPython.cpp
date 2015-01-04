@@ -29,6 +29,7 @@
 #include <QVariant>
 #include <QMetaType>
 #include <QStandardPaths>
+#include <QDir>
 #include "Misc/Utility.h"
 
 /**
@@ -90,6 +91,7 @@
  *      return c
  */
 
+QMutex EmbeddedPython::m_mutex;
 EmbeddedPython* EmbeddedPython::m_instance = 0;
 
 EmbeddedPython* EmbeddedPython::instance()
@@ -103,7 +105,6 @@ EmbeddedPython* EmbeddedPython::instance()
 EmbeddedPython::EmbeddedPython()
 {
     Py_Initialize();
-    addToPythonSysPath(embeddedRoot());
 }
 
 EmbeddedPython::~EmbeddedPython()
@@ -120,24 +121,25 @@ QString EmbeddedPython::embeddedRoot()
     QString embedded_root = QCoreApplication::applicationDirPath();
 
 #ifdef Q_OS_MAC
-    embedded_root += "/../embedded_python_code/";
+    embedded_root += "/../python3lib/";
 #elif defined(Q_OS_WIN32)
-    embedded_root += "/embedded_python_code/";
+    embedded_root += "/python3lib/";
 #elif !defined(Q_OS_WIN32) && !defined(Q_OS_MAC)
     // all flavours of linux / unix
-    embedded_root += "/../share/" + QCoreApplication::applicationName().toLower() + "/embedded_python_code/";
+    embedded_root += "/../share/" + QCoreApplication::applicationName().toLower() + "/python3lib/";
     // user supplied environment variable to embedded python code directory will overrides everything
     const QString env_embedded_location = QString(getenv("SIGIL_EMBEDDED_PYTHON_CODE"));
     if (!env_embedded_location.isEmpty()) {
         embedded_root = env_embedded_location + "/";
     }
 #endif
-
-    return embedded_root;
+    QDir base(embedded_root);
+    return base.absolutePath();
 }
 
 bool EmbeddedPython::addToPythonSysPath(const QString& mpath)
 {
+    EmbeddedPython::m_mutex.lock();
     PyObject* sysPath    = NULL;
     PyObject* aPath = NULL;
     bool success = false;
@@ -152,9 +154,88 @@ bool EmbeddedPython::addToPythonSysPath(const QString& mpath)
         }
     }
     Py_XDECREF(aPath);
+    EmbeddedPython::m_mutex.unlock();
     return success;
 }
 
+// run interpreter without initiating/locking/unlocking GIL 
+// in a single thread at a time
+QVariant EmbeddedPython::runInPython(const QString& mname, 
+                                     const QString& fname, 
+                                     const QVariantList& args, 
+                                     int *rv, 
+                                     QString & tb)
+{
+    EmbeddedPython::m_mutex.lock();
+    QVariant  res        = QVariant(QString());
+    PyObject *moduleName = NULL;
+    PyObject *module     = NULL;
+    PyObject *func       = NULL;
+    PyObject *pyargs     = NULL;
+    PyObject *pyres      = NULL;
+    int       idx        = 0;
+        
+    moduleName = PyUnicode_FromString(mname.toUtf8().constData());
+    if (moduleName == NULL) {
+        *rv = -1;
+        goto cleanup;
+    }
+
+    module = PyImport_Import(moduleName);
+    if (module == NULL) {
+        *rv = -2;
+        goto cleanup;
+    }
+
+    func = PyObject_GetAttrString(module,fname.toUtf8().constData());
+    if (func == NULL) {
+        *rv = -3;
+        goto cleanup;
+    }
+
+    if (!PyCallable_Check(func)) {
+        *rv = -4;
+        goto cleanup;
+    }
+
+    // Build up Python argument List from args
+    pyargs = PyTuple_New(args.size());
+    idx = 0;
+    foreach(QVariant arg, args) {
+        PyTuple_SetItem(pyargs, idx, QVariantToPyObject(arg));
+        idx++;
+    }
+
+    pyres = PyObject_CallObject(func, pyargs);
+    if (pyres == NULL) {
+        *rv = -5;
+        goto cleanup;
+    }
+
+    *rv = 0;
+
+    res = PyObjectToQVariant(pyres);
+
+cleanup:
+    if (PyErr_Occurred() != NULL) {
+        tb = getPythonErrorTraceback();
+    }
+    Py_XDECREF(pyres);
+    Py_XDECREF(pyargs);
+    Py_XDECREF(func);
+    Py_XDECREF(module);
+    Py_XDECREF(moduleName);
+
+    EmbeddedPython::m_mutex.unlock();
+    return res;
+}
+
+
+// *** below here all routines are private and only invoked 
+// *** from runInPython with lock held
+
+
+// Convert PyObject types to their QVariant equivalents 
 // call recursively to allow populating QVariant lists and lists of lists
 QVariant EmbeddedPython::PyObjectToQVariant(PyObject* po)
 {
@@ -217,7 +298,7 @@ QVariant EmbeddedPython::PyObjectToQVariant(PyObject* po)
     return res;
 }
 
-
+// Convert QVariant to a Python Equivalent Type
 // call recursively to allow populating tuples/lists and lists of lists
 PyObject* EmbeddedPython::QVariantToPyObject(QVariant & v)
 {
@@ -268,6 +349,8 @@ PyObject* EmbeddedPython::QVariantToPyObject(QVariant & v)
     return value;
 }
 
+
+// get traceback from inside interpreter upon error
 QString EmbeddedPython::getPythonErrorTraceback(bool useMsgBox)
 {
     PyObject     *etype      = NULL;
@@ -307,72 +390,4 @@ QString EmbeddedPython::getPythonErrorTraceback(bool useMsgBox)
         Utility::DisplayStdErrorDialog(message, tb);
     }
     return tb;
-}
-
-QVariant EmbeddedPython::runInPython(const QString& mname, 
-                                     const QString& fname, 
-                                     const QVariantList& args, 
-                                     int *rv, 
-                                     QString & tb)
-{
-    QVariant  res        = QVariant(QString());
-    PyObject *moduleName = NULL;
-    PyObject *module     = NULL;
-    PyObject *func       = NULL;
-    PyObject *pyargs     = NULL;
-    PyObject *pyres      = NULL;
-    int       idx        = 0;
-        
-    moduleName = PyUnicode_FromString(mname.toUtf8().constData());
-    if (moduleName == NULL) {
-        *rv = -1;
-        goto cleanup;
-    }
-
-    module = PyImport_Import(moduleName);
-    if (module == NULL) {
-        *rv = -2;
-        goto cleanup;
-    }
-
-    func = PyObject_GetAttrString(module,fname.toUtf8().constData());
-    if (func == NULL) {
-        *rv = -3;
-        goto cleanup;
-    }
-
-    if (!PyCallable_Check(func)) {
-        *rv = -4;
-        goto cleanup;
-    }
-
-    // Build up Python argument List from args
-    pyargs = PyTuple_New(args.size());
-    idx = 0;
-    foreach(QVariant arg, args) {
-        PyTuple_SetItem(pyargs, idx, QVariantToPyObject(arg));
-        idx++;
-    }
-
-    pyres = PyObject_CallObject(func, pyargs);
-    if (pyres == NULL) {
-        *rv = -5;
-        goto cleanup;
-    }
-
-    *rv = 0;
-
-    res = PyObjectToQVariant(pyres);
-
-cleanup:
-    if (PyErr_Occurred() != NULL) {
-        tb = getPythonErrorTraceback();
-    }
-    Py_XDECREF(pyres);
-    Py_XDECREF(pyargs);
-    Py_XDECREF(func);
-    Py_XDECREF(module);
-    Py_XDECREF(moduleName);
-
-    return res;
 }
