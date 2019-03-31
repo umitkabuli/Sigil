@@ -2,7 +2,7 @@ About
 =====
 Bu Sigil dallanması Sigil GUI'sinin Türkçeleştirilmesi Amacıyla Oluşturulmuştur. 
 Çevire konu olan sigil_tr.ts dosyasını şuradan indirebilirsiniz
-https://raw.githubusercont~ent.com/umitkabuli/Sigil/master/src/Resource_Files/ts/sigil_tr.ts
+https://raw.githubusercontent.com/umitkabuli/Sigil/master/src/Resource_Files/ts/sigil_tr.ts
 
 Sadece bu dosyasyı indrip çevireye herhangi bir metin editörü ile (gedit veya Notepad++ önerimdir.) düzenlemeyi gerçekleştirebilirsiniz.
 Bir başka alternatif ise projeyi
