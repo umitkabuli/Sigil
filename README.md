@@ -1,5 +1,16 @@
 About
 =====
+Bu Sigil dallanması Sigil GUI'sinin Türkçeleştirilmesi Amacıyla Oluşturulmuştur. 
+Çevire konu olan sigil_tr.ts dosyasını şuradan indirebilirsiniz
+https://raw.githubusercontent.com/umitkabuli/Sigil/master/src/Resource_Files/ts/sigil_tr.ts
+
+Sadece bu dosyasyı indrip çevireye herhangi bir metin editörü ile (gedit veya Notepad++ önerimdir.) düzenlemeyi gerçekleştirebilirsiniz.
+Bir başka alternatif ise projeyi
+git clone https://github.com/umitkabuli/Sigil/
+ile klonlayıp Qt5 indirerek (https://www.qt.io/download) Qt Linguist editörünü kullanamaktır. Bu yöntem kaynak kod bağlantılarını da görsel olarak izleyebilme imkanı sunar. Ancak çevire katılabilmek için zorunlu değildir.
+Tavsiyem sade sigil_tr.ts dosyasını indirin  ve Notepad++ editör ile <translation></translation> etiketi içindeki metni Türkçeye çevrin.
+
+
 
 Sigil is a free, open source, multi-platform ebook editor.
 It is designed to edit books in ePub format (both ePub 2 and ePub 3).
